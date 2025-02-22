@@ -1,64 +1,82 @@
-
 import User from "../models/user.model.js";
+import Message from "../models/message.model.js";
 
+import cloudinary from "../lib/cloudinary.js";
+import { getReceiverSocketId, io } from "../lib/socket.js";
+
+// Get all users except the logged-in user
 export const getUsersForSidebar = async (req, res) => {
   try {
-    const loggedInUserId = req.user.id;
+    const loggedInUserId = req.user._id;
     const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
 
     res.status(200).json(filteredUsers);
   } catch (error) {
-   console.error("Error in getUsersForSidebar: ", error.messgae);
-   
-  } 
+    console.error("Error in getUsersForSidebar: ", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
 };
 
-export const getMessages = async (req, res) => {  
-  try{
-    const { id: userTochatId} = req.params;
-    const myId = req.user.id;
-    
+// Get messages between two users
+export const getMessages = async (req, res) => {
+  try {
+    const { id: userToChatId } = req.params;
+    const myId = req.user._id;
+
     const messages = await Message.find({
       $or: [
-        { senderId: myId, receiverId: userTochatId },
-        { senderId: userTochatId, receiverId: myId },
+        { senderId: myId, receiverId: userToChatId },
+        { senderId: userToChatId, receiverId: myId },
       ],
     });
 
     res.status(200).json(messages);
-  }catch (error) {
-    console.error("Error in getMessages controller:  ", error.message);
-    res.ststus(500).json({ message: "Server Error" });
-
+  } catch (error) {
+    console.error("Error in getMessages controller: ", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
+// Send message
 export const sendMessage = async (req, res) => {
-  try{
+  try {
     const { text, image } = req.body;
     const { id: receiverId } = req.params;
-    const senderId = req.user.id;
+    const senderId = req.user._id;
 
-    let imageUrl;
+    // Ensure that at least text or image is provided
+    if (!text && !image) {
+      return res.status(400).json({ error: "Message must contain text or an image." });
+    }
+
+    let imageUrl = null;
     if (image) {
-      const  uploadedImage = await cloudinary.uploader.upload(image);
-      imageUrl = uploadedResponse.secure_url;
-  }
+      try {
+        const uploadResponse = await cloudinary.uploader.upload(image);
+        imageUrl = uploadResponse.secure_url;
+      } catch (uploadError) {
+        console.error("Error uploading image to Cloudinary:", uploadError);
+        return res.status(500).json({ error: "Failed to upload image." });
+      }
+    }
 
-  const newMessage = new Message({
-    senderId,
-    receiverId,
-    text,
-    image: imageUrl,
-  });
+    const newMessage = new Message({
+      senderId,
+      receiverId,
+      text,
+      image: imageUrl,
+    });
 
-  await newMessage.save();
+    await newMessage.save();
 
-  //socket.io
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("newMessage", newMessage);
+    }
 
-  res.status(201).json(newMessage);
-  }catch (error) {
-    console.error("Error in sendMessage controller: ", error.message);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(201).json(newMessage);
+  } catch (error) {
+    console.error("Error in sendMessage controller: ", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
