@@ -19,12 +19,9 @@ const messageSchema = new mongoose.Schema(
       type: String,
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-// Define the Message model correctly
 const Message = mongoose.model("Message", messageSchema);
 
-export default Message; // Export Message instead of undefined variable
+export default Message;

@@ -1,36 +1,42 @@
-import express from 'express';
-import dotenv from 'dotenv';
-import cookieParser from 'cookie-parser';
+import express from "express";
+import dotenv from "dotenv";
+import cookieParser from "cookie-parser";
+import cors from "cors";
 
-import { connectDB } from './lib/db.js';
+import path from "path";
 
-import authRoutes from './routes/auth.routes.js';
-import messageRoutes from './routes/message.routes.js';
-import {  server } from "./lib/socket.js";
+import { connectDB } from "./lib/db.js";
+
+import authRoutes from "./routes/auth.route.js";
+import messageRoutes from "./routes/message.route.js";
+import { app, server } from "./lib/socket.js";
 
 dotenv.config();
-const app = express();
 
-// Set default port if not defined in .env
-const PORT = process.env.PORT 
+const PORT = process.env.PORT;
+const __dirname = path.resolve();
 
-// Middleware to parse JSON (should be before routes)
 app.use(express.json());
-
-// Middleware to parse cookies
 app.use(cookieParser());
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  })
+);
 
-// Root route to confirm server is running
-app.get("/", (req, res) => {
-    res.send("Server is running...");
-});
+app.use("/api/auth", authRoutes);
+app.use("/api/messages", messageRoutes);
 
-// Authentication routes
-app.use('/api/auth', authRoutes);
-app.use('/api/messages', messageRoutes);
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname, "../frontend/dist")));
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`Click to open: http://localhost:${PORT}`);
-    connectDB();
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
+  });
+}
+
+server.listen(PORT, () => {
+  console.log("server is running on PORT:" + PORT);
+  connectDB();
 });
